@@ -7,7 +7,6 @@ import { fileURLToPath } from "url";
 import http from "http";
 import { Server } from "socket.io";
 
-// ROUTES
 import reviewRoutes from "./routes/reviewRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 import productRoutes from "./routes/productRoutes.js";
@@ -19,46 +18,35 @@ dotenv.config();
 const app = express();
 const server = http.createServer(app);
 
-/* ================= PATH SETUP ================= */
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-/* ================= CORS ================= */
+/* ===================== ALLOWED ORIGINS ===================== */
 const allowedOrigins = [
   "http://localhost:5173",
-  "https://github.com/ismartashish/traditionalfrontend.git" 
+  "https://bharat-tradition.netlify.app"
 ];
 
+/* ===================== EXPRESS CORS ===================== */
 app.use(
   cors({
-    origin: allowedOrigins,
-    credentials: true
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
   })
 );
 
-/* ================= MIDDLEWARE ================= */
 app.use(express.json());
 
-/* ================= STATIC FILES ================= */
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
-
-/* ================= ROUTES ================= */
-app.use("/api/auth", authRoutes);
-app.use("/api/products", productRoutes);
-app.use("/api/orders", orderRoutes);
-app.use("/api/users", userRoutes);
-app.use("/api/reviews", reviewRoutes);
-
-/* ================= HEALTH CHECK ================= */
-app.get("/", (req, res) => {
-  res.send("🚀 Bharat Traditions API is running");
-});
-
-/* ================= SOCKET.IO ================= */
+/* ===================== SOCKET.IO ===================== */
 const io = new Server(server, {
   cors: {
     origin: allowedOrigins,
-    methods: ["GET", "POST", "PUT"],
+    methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true
   }
 });
@@ -73,18 +61,27 @@ io.on("connection", (socket) => {
 
 export { io };
 
-/* ================= DATABASE + SERVER ================= */
+/* ===================== STATIC FILES ===================== */
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
+/* ===================== ROUTES ===================== */
+app.use("/api/reviews", reviewRoutes);
+app.use("/api/auth", authRoutes);
+app.use("/api/products", productRoutes);
+app.use("/api/orders", orderRoutes);
+app.use("/api/users", userRoutes);
+
+/* ===================== START SERVER ===================== */
 const PORT = process.env.PORT || 5000;
 
 mongoose
   .connect(process.env.MONGO_URI)
   .then(() => {
     console.log("✅ MongoDB Connected");
-
-    server.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT}`);
-    });
+    server.listen(PORT, () =>
+      console.log(`🚀 Server running on port ${PORT}`)
+    );
   })
-  .catch((err) => {
-    console.error("❌ DB connection error:", err);
-  });
+  .catch((err) => console.error("❌ DB error:", err));
