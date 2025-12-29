@@ -20,7 +20,7 @@ const server = http.createServer(app);
 
 /* ===================== ALLOWED ORIGINS ===================== */
 const allowedOrigins = [
-  "http://localhost:5173",
+  "https://traditionalfrontend.vercel.app",
   "https://bharat-tradition.netlify.app"
 ];
 
