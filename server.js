@@ -20,27 +20,22 @@ const server = http.createServer(app);
 
 /* ===================== ALLOWED ORIGINS ===================== */
 const allowedOrigins = [
-  "https://traditionalfrontend.vercel.app",
-  "https://bharat-tradition.netlify.app"
+  "https://traditionalfrontend.vercel.app"
 ];
 
-/* ===================== EXPRESS CORS ===================== */
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
-  })
-);
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
 
-app.use(express.json());
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
+  credentials: true
+}));
+
 
 /* ===================== SOCKET.IO ===================== */
 const io = new Server(server, {
