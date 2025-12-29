@@ -6,64 +6,85 @@ import nodemailer from "nodemailer";
 
 /* ---------- FORGOT PASSWORD ---------- */
 export const forgotPassword = async (req, res) => {
-  const user = await User.findOne({ email: req.body.email });
-  if (!user) return res.status(404).json({ message: "User not found" });
-
-  const token = crypto.randomBytes(20).toString("hex");
-
-  user.resetPasswordToken =
-    crypto.createHash("sha256").update(token).digest("hex");
-  user.resetPasswordExpire = Date.now() + 15 * 60 * 1000;
-
-  await user.save();
-
-  const resetUrl = `http://localhost:5173/reset-password/${token}`;
-
-  const transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS
+  try {
+    const user = await User.findOne({ email: req.body.email });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
     }
-  });
 
-  await transporter.sendMail({
-    to: user.email,
-    subject: "Password Reset",
-    html: `<a href="${resetUrl}">Reset Password</a>`
-  });
+    const token = crypto.randomBytes(20).toString("hex");
 
-  res.json({ message: "Reset link sent to email" });
+    user.resetPasswordToken = crypto
+      .createHash("sha256")
+      .update(token)
+      .digest("hex");
+
+    user.resetPasswordExpire = Date.now() + 15 * 60 * 1000;
+
+    await user.save();
+
+    const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${token}`;
+
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+      }
+    });
+
+    await transporter.sendMail({
+      to: user.email,
+      subject: "Password Reset",
+      html: `<p>Click below to reset your password:</p>
+             <a href="${resetUrl}">${resetUrl}</a>`
+    });
+
+    res.json({ message: "Reset link sent to email" });
+  } catch (err) {
+    console.error("FORGOT PASSWORD ERROR:", err);
+    res.status(500).json({ message: "Server error" });
+  }
 };
 
 /* ---------- RESET PASSWORD ---------- */
 export const resetPassword = async (req, res) => {
-  const token = crypto
-    .createHash("sha256")
-    .update(req.params.token)
-    .digest("hex");
+  try {
+    const token = crypto
+      .createHash("sha256")
+      .update(req.params.token)
+      .digest("hex");
 
-  const user = await User.findOne({
-    resetPasswordToken: token,
-    resetPasswordExpire: { $gt: Date.now() }
-  });
+    const user = await User.findOne({
+      resetPasswordToken: token,
+      resetPasswordExpire: { $gt: Date.now() }
+    });
 
-  if (!user) return res.status(400).json({ message: "Invalid token" });
+    if (!user) {
+      return res.status(400).json({ message: "Invalid or expired token" });
+    }
 
-  user.password = await bcrypt.hash(req.body.password, 10);
-  user.resetPasswordToken = undefined;
-  user.resetPasswordExpire = undefined;
+    user.password = await bcrypt.hash(req.body.password, 10);
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpire = undefined;
 
-  await user.save();
+    await user.save();
 
-  res.json({ message: "Password reset successful" });
+    res.json({ message: "Password reset successful" });
+  } catch (err) {
+    console.error("RESET PASSWORD ERROR:", err);
+    res.status(500).json({ message: "Server error" });
+  }
 };
 
 /* ================= LOGIN ================= */
-
 export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ message: "Email and password required" });
+    }
 
     const user = await User.findOne({ email });
     if (!user) {
@@ -97,12 +118,9 @@ export const login = async (req, res) => {
   }
 };
 
-/* ================= REGISTER (BUYER + SELLER) ================= */
-
+/* ================= REGISTER ================= */
 export const register = async (req, res) => {
   try {
-    console.log("REGISTER BODY:", req.body);
-
     const {
       name,
       email,
@@ -141,7 +159,7 @@ export const register = async (req, res) => {
       user
     });
   } catch (err) {
-    console.error("REGISTER ERROR:", err); // 👈 THIS IS KEY
+    console.error("REGISTER ERROR:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
