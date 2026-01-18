@@ -26,7 +26,7 @@ app.use(express.urlencoded({ extended: true }));
 const allowedOrigins = [
   "https://traditionalfrontend.vercel.app",
   "http://localhost:5173",
-  "http://localhost:3000"
+  "https://rupanjanasaha550.github.io/traditionalfrontend"
 ];
 
 app.use(
