@@ -14,27 +14,26 @@ import orderRoutes from "./routes/orderRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 import chatRoutes from "./routes/chatRoutes.js";
 
-
 dotenv.config();
 
 const app = express();
 const server = http.createServer(app);
 
 /* ===================== MIDDLEWARE ===================== */
-app.use(express.json()); // ✅ REQUIRED
+app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-/* ===================== ALLOWED ORIGINS ===================== */
+/* ===================== CORS (FIXED POSITION) ===================== */
 const allowedOrigins = [
   "https://traditionalfrontend.vercel.app",
   "http://localhost:5173",
   "https://rupanjanasaha550.github.io/traditionalfrontend"
 ];
-app.use("/api/chat", chatRoutes);
+
 app.use(
   cors({
     origin: function (origin, callback) {
-      if (!origin) return callback(null, true); // allow Postman / mobile apps
+      if (!origin) return callback(null, true);
 
       if (allowedOrigins.includes(origin)) {
         callback(null, true);
@@ -82,8 +81,9 @@ app.use("/api/auth", authRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/users", userRoutes);
+app.use("/api/chat", chatRoutes); // ✅ MOVED HERE (AFTER CORS)
 
-/* ===================== 404 HANDLER ===================== */
+/* ===================== 404 ===================== */
 app.use((req, res) => {
   res.status(404).json({ message: "Route not found" });
 });
