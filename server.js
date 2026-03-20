@@ -12,6 +12,8 @@ import authRoutes from "./routes/authRoutes.js";
 import productRoutes from "./routes/productRoutes.js";
 import orderRoutes from "./routes/orderRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
+import chatRoutes from "./routes/chatRoutes.js";
+
 
 dotenv.config();
 
@@ -28,7 +30,7 @@ const allowedOrigins = [
   "http://localhost:5173",
   "https://rupanjanasaha550.github.io/traditionalfrontend"
 ];
-
+app.use("/api/chat", chatRoutes);
 app.use(
   cors({
     origin: function (origin, callback) {
