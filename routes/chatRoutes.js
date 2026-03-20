@@ -8,9 +8,11 @@ router.post("/", async (req, res) => {
     const { message } = req.body;
 
     const response = await axios.post(
-      "https://api-inference.huggingface.co/models/google/flan-t5-large",
+      "https://api-inference.huggingface.co/models/google/flan-t5-base", // ✅ changed model
       {
-        inputs: message,
+        inputs: `You are a helpful assistant for Bharat Traditions ecommerce app.
+User: ${message}
+Assistant:`,
       },
       {
         headers: {
@@ -19,13 +21,21 @@ router.post("/", async (req, res) => {
       }
     );
 
-    res.json({
-      reply: response.data[0]?.generated_text || "No response",
-    });
+    let reply = "Try again 😅";
+
+    if (Array.isArray(response.data)) {
+      reply = response.data[0]?.generated_text;
+    } else if (response.data?.error) {
+      reply = "Model is loading ⏳, try again in few seconds";
+    }
+
+    res.json({ reply });
+
   } catch (error) {
-    console.error(error.message);
+    console.error("CHAT ERROR:", error.response?.data || error.message);
+
     res.json({
-      reply: "Server busy, try again 😅",
+      reply: "Server busy 😅 try again later"
     });
   }
 });
