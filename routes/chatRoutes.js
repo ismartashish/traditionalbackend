@@ -8,7 +8,7 @@ router.post("/", async (req, res) => {
     const { message } = req.body;
 
     const response = await axios.post(
-      "https://api-inference.huggingface.co/models/google/flan-t5-base", // ✅ changed model
+      "https://router.huggingface.co/hf-inference/models/google/flan-t5-base",
       {
         inputs: `You are a helpful assistant for Bharat Traditions ecommerce app.
 User: ${message}
