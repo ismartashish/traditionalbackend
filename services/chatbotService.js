@@ -9,12 +9,9 @@ const normalizeText = (message = "") => {
 /* =========================================================
    PRODUCT QUERY EXTRACTION
 ========================================================= */
+
 const extractProductQuery = (message) => {
   const query = {};
-
-  /* ----------------------------- */
-  /* Price                          */
-  /* ----------------------------- */
 
   const maxPriceMatch = message.match(
     /(?:under|below|less than)\s*[₹rs.]?\s*(\d+)/i
@@ -32,45 +29,25 @@ const extractProductQuery = (message) => {
     query.minPrice = Number(minPriceMatch[1]);
   }
 
-  /* ----------------------------- */
-  /* State                          */
-  /* ----------------------------- */
-
   if (/rajasthan|rajasthani/i.test(message)) {
     query.state = "Rajasthan";
   } else if (/bihar|bihari/i.test(message)) {
     query.state = "Bihar";
-  } else if (
-    /uttar pradesh|banaras|banarasi/i.test(message)
-  ) {
+  } else if (/uttar pradesh|banaras|banarasi/i.test(message)) {
     query.state = "Uttar Pradesh";
   } else if (/kashmir|kashmiri/i.test(message)) {
     query.state = "Kashmir";
   }
 
-  /* ----------------------------- */
-  /* Category                       */
-  /* ----------------------------- */
-
-  if (
-    /clothing|cloth|saree|kurta|dress|apparel/i.test(message)
-  ) {
+  if (/clothing|cloth|saree|kurta|dress|apparel/i.test(message)) {
     query.category = "Clothing";
-  } else if (
-    /handicraft|handmade|craft|pottery/i.test(message)
-  ) {
+  } else if (/handicraft|handmade|craft|pottery/i.test(message)) {
     query.category = "Handicraft";
   } else if (/painting|paintings|art/i.test(message)) {
     query.category = "Painting";
-  } else if (
-    /footwear|shoes|mojari|sandals/i.test(message)
-  ) {
+  } else if (/footwear|shoes|mojari|sandals/i.test(message)) {
     query.category = "Footwear";
   }
-
-  /* ----------------------------- */
-  /* Stock                          */
-  /* ----------------------------- */
 
   if (
     /in stock|available|available products|currently available/i.test(
@@ -86,6 +63,7 @@ const extractProductQuery = (message) => {
 /* =========================================================
    FORMAT PRODUCTS
 ========================================================= */
+
 const formatProducts = (products) => {
   return products.map((product) => ({
     id: product._id.toString(),
@@ -99,57 +77,132 @@ const formatProducts = (products) => {
 };
 
 /* =========================================================
-   PERSONAL INTENT
+   BASIC INTENTS
 ========================================================= */
-const isGreeting = (text) => {
-  return /^(hi|hii|hello|hey|hey there|namaste|good morning|good afternoon|good evening)\b/i.test(
+
+const isGreeting = (text) =>
+  /^(hi|hii|hello|hey|hey there|namaste|good morning|good afternoon|good evening)\b/i.test(
     text
   );
-};
 
-const isNameQuestion = (text) => {
-  return (
-    /my name/i.test(text) ||
-    /what is my name/i.test(text) ||
-    /what's my name/i.test(text) ||
-    /who am i/i.test(text)
-  );
-};
+const isNameQuestion = (text) =>
+  /my name|what is my name|what's my name|who am i/i.test(text);
 
-const isEmailQuestion = (text) => {
-  return (
-    /my email/i.test(text) ||
-    /email address/i.test(text) ||
-    /what is my email/i.test(text) ||
-    /what's my email/i.test(text) ||
-    /registered email/i.test(text)
+const isEmailQuestion = (text) =>
+  /my email|email address|what is my email|what's my email|registered email/i.test(
+    text
   );
-};
 
-const isProfileQuestion = (text) => {
-  return (
-    /my profile/i.test(text) ||
-    /profile details/i.test(text) ||
-    /my account/i.test(text) ||
-    /account details/i.test(text)
-  );
-};
+const isProfileQuestion = (text) =>
+  /my profile|profile details|my account|account details/i.test(text);
 
-const isOrderQuestion = (text) => {
-  return (
-    /my order/i.test(text) ||
-    /my orders/i.test(text) ||
-    /order status/i.test(text) ||
-    /where is my order/i.test(text) ||
-    /where's my order/i.test(text) ||
-    /latest order/i.test(text) ||
-    /recent order/i.test(text)
+const isOrderQuestion = (text) =>
+  /my order|my orders|order status|where is my order|where's my order|latest order|recent order/i.test(
+    text
   );
+
+const isCancelOrderQuestion = (text) =>
+  /cancel.*order|cancel my order|cancel order|cancel.*purchase/i.test(text);
+
+const isConfirmation = (text) =>
+  /^(yes|yep|yeah|yup|confirm|confirmed|please do|do it|cancel it|sure)$/i.test(
+    text
+  );
+
+const isRejection = (text) =>
+  /^(no|nope|nah|don't|dont|not now|stop)$/i.test(text);
+
+/* =========================================================
+   FIND USER'S LATEST CANCELLABLE ORDER
+========================================================= */
+
+const findCancellableOrder = async (user, message = "") => {
+  if (!user?._id) {
+    return null;
+  }
+
+  const orders = await Order.find({
+    user: user._id,
+    status: {
+      $nin: ["Delivered", "Cancelled"],
+    },
+  })
+    .populate("items.product", "title price")
+    .sort({ createdAt: -1 })
+    .limit(10)
+    .lean();
+
+  if (!orders.length) {
+    return null;
+  }
+
+  // Try to match a product name from the user's message.
+  const ignoredWords = [
+    "cancel",
+    "my",
+    "the",
+    "order",
+    "please",
+    "purchase",
+    "this",
+  ];
+
+  const keywords = message
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((word) => word.length > 2 && !ignoredWords.includes(word));
+
+  if (keywords.length > 0) {
+    for (const order of orders) {
+      const hasMatchingProduct = order.items?.some((item) => {
+        const title = item.product?.title?.toLowerCase() || "";
+
+        return keywords.some((keyword) =>
+          title.includes(keyword)
+        );
+      });
+
+      if (hasMatchingProduct) {
+        return order;
+      }
+    }
+  }
+
+  // Otherwise use latest cancellable order.
+  return orders[0];
 };
 
 /* =========================================================
-   ORDER RESPONSE
+   ORDER SUMMARY
 ========================================================= */
+
+const buildOrderSummary = (order) => {
+  const itemNames =
+    order.items
+      ?.map((item) => item.product?.title)
+      .filter(Boolean)
+      .slice(0, 5) || [];
+
+  const itemCount =
+    order.items?.reduce(
+      (total, item) => total + Number(item.quantity || 0),
+      0
+    ) || 0;
+
+  return {
+    orderId: order._id.toString(),
+    status: order.status,
+    itemCount,
+    itemNames,
+    totalAmount: order.totalAmount,
+  };
+};
+
+/* =========================================================
+   ORDER STATUS
+========================================================= */
+
 const getLatestOrderResponse = async (user) => {
   if (!user?._id) {
     return {
@@ -173,19 +226,17 @@ const getLatestOrderResponse = async (user) => {
     };
   }
 
-  const itemCount = Array.isArray(order.items)
-    ? order.items.reduce(
-        (total, item) => total + Number(item.quantity || 0),
-        0
-      )
-    : 0;
+  const itemCount =
+    order.items?.reduce(
+      (total, item) => total + Number(item.quantity || 0),
+      0
+    ) || 0;
 
-  const productNames = Array.isArray(order.items)
-    ? order.items
-        .map((item) => item.product?.title)
-        .filter(Boolean)
-        .slice(0, 3)
-    : [];
+  const productNames =
+    order.items
+      ?.map((item) => item.product?.title)
+      .filter(Boolean)
+      .slice(0, 3) || [];
 
   let reply = `Your latest order is currently "${order.status}".`;
 
@@ -208,8 +259,9 @@ const getLatestOrderResponse = async (user) => {
 };
 
 /* =========================================================
-   HUGGING FACE AI RESPONSE
+   AI RESPONSE
 ========================================================= */
+
 const generateAIReply = async ({
   message,
   productContext,
@@ -242,12 +294,11 @@ You are Bharat Assistant, an ecommerce shopping assistant for traditional Indian
 Use ONLY the provided product information.
 
 Rules:
-- Do not invent products.
-- Do not invent prices.
-- Do not invent stock.
-- Do not invent ratings.
+- Never invent products.
+- Never invent prices.
+- Never invent stock.
+- Never invent ratings.
 - Be concise and friendly.
-- Mention product names and prices when relevant.
             `.trim(),
           },
           {
@@ -259,7 +310,7 @@ ${message}
 Available products:
 ${context}
 
-Answer the user naturally.
+Answer naturally.
             `.trim(),
           },
         ],
@@ -293,9 +344,13 @@ Answer the user naturally.
 /* =========================================================
    MAIN CHAT FUNCTION
 ========================================================= */
-export const processChatMessage = async (message, user = null) => {
+
+export const processChatMessage = async (
+  message,
+  user = null
+) => {
   try {
-    if (!message || !message.trim()) {
+    if (!message?.trim()) {
       return {
         reply: "Please enter a message 😊",
         products: [],
@@ -304,49 +359,49 @@ export const processChatMessage = async (message, user = null) => {
 
     const text = normalizeText(message);
 
-    /* =====================================================
+    /* ============================================
        GREETING
-    ===================================================== */
+    ============================================ */
 
     if (isGreeting(text)) {
-      const name = user?.name
-        ? ` ${user.name}`
-        : "";
-
       return {
-        reply: `Hi${name} 👋 How can I help you today? You can ask me about products, your account, or your orders.`,
+        reply: user?.name
+          ? `Hi ${user.name} 👋 How can I help you today?`
+          : "Hi 👋 How can I help you today?",
         products: [],
       };
     }
 
-    /* =====================================================
+    /* ============================================
        NAME
-    ===================================================== */
+    ============================================ */
 
     if (isNameQuestion(text)) {
       if (!user) {
         return {
           reply:
-            "Please log in first, then I can tell you the name on your account 🔐",
+            "Please log in first, then I can tell you your account name 🔐",
           products: [],
         };
       }
 
       return {
-        reply: `Your account name is ${user.name || "not available"} 😊`,
+        reply: `Your account name is ${
+          user.name || "not available"
+        } 😊`,
         products: [],
       };
     }
 
-    /* =====================================================
+    /* ============================================
        EMAIL
-    ===================================================== */
+    ============================================ */
 
     if (isEmailQuestion(text)) {
       if (!user) {
         return {
           reply:
-            "Please log in first, then I can show you your registered email 🔐",
+            "Please log in first, then I can show your registered email 🔐",
           products: [],
         };
       }
@@ -354,14 +409,14 @@ export const processChatMessage = async (message, user = null) => {
       return {
         reply: user.email
           ? `Your registered email is ${user.email} 📧`
-          : "I couldn't find an email address on your account.",
+          : "I couldn't find an email on your account.",
         products: [],
       };
     }
 
-    /* =====================================================
+    /* ============================================
        PROFILE
-    ===================================================== */
+    ============================================ */
 
     if (isProfileQuestion(text)) {
       if (!user) {
@@ -372,42 +427,83 @@ export const processChatMessage = async (message, user = null) => {
         };
       }
 
-      const profileLines = [
-        `Name: ${user.name || "Not available"}`,
-        `Email: ${user.email || "Not available"}`,
-        `Role: ${user.role || "buyer"}`,
-      ];
-
       return {
         reply:
-          `Here are your account details:\n\n${profileLines.join(
-            "\n"
-          )}`,
+          `Here are your account details:\n\n` +
+          `Name: ${user.name || "Not available"}\n` +
+          `Email: ${user.email || "Not available"}\n` +
+          `Role: ${user.role || "buyer"}`,
         products: [],
       };
     }
 
-    /* =====================================================
-       ORDERS
-    ===================================================== */
+    /* ============================================
+       CANCEL ORDER
+    ============================================ */
+
+    if (isCancelOrderQuestion(text)) {
+      if (!user) {
+        return {
+          reply:
+            "Please log in first so I can cancel your order 🔐",
+          products: [],
+        };
+      }
+
+      const order = await findCancellableOrder(user, text);
+
+      if (!order) {
+        return {
+          reply:
+            "I couldn't find a cancellable order on your account. Delivered or already cancelled orders can't be cancelled.",
+          products: [],
+        };
+      }
+
+      const summary = buildOrderSummary(order);
+
+      const itemText =
+        summary.itemNames.length > 0
+          ? summary.itemNames.join(", ")
+          : "your order";
+
+      return {
+        reply:
+          `I found your order containing ${itemText}.\n\n` +
+          `Current status: ${summary.status}\n` +
+          `Total: ₹${Number(
+            summary.totalAmount || 0
+          ).toLocaleString("en-IN")}\n\n` +
+          `Do you want me to cancel this order? Reply "yes" to confirm.`,
+        products: [],
+        action: {
+          type: "CANCEL_ORDER_CONFIRM",
+          orderId: summary.orderId,
+          status: summary.status,
+          itemNames: summary.itemNames,
+          totalAmount: summary.totalAmount,
+        },
+      };
+    }
+
+    /* ============================================
+       NORMAL ORDER QUERY
+    ============================================ */
 
     if (isOrderQuestion(text)) {
       return await getLatestOrderResponse(user);
     }
 
-    /* =====================================================
+    /* ============================================
        PRODUCT SEARCH
-    ===================================================== */
+    ============================================ */
 
     const query = extractProductQuery(message);
 
-    const products = await searchProductsForChatbot(query);
+    const products =
+      await searchProductsForChatbot(query);
 
     const productContext = formatProducts(products);
-
-    /* =====================================================
-       NO PRODUCTS
-    ===================================================== */
 
     if (productContext.length === 0) {
       return {
@@ -417,22 +513,15 @@ export const processChatMessage = async (message, user = null) => {
       };
     }
 
-    /* =====================================================
-       AI RESPONSE
-    ===================================================== */
-
     const aiReply = await generateAIReply({
       message,
       productContext,
     });
 
-    /* =====================================================
-       FALLBACK RESPONSE
-    ===================================================== */
-
-    const fallbackReply = `I found ${productContext.length} matching product${
-      productContext.length === 1 ? "" : "s"
-    } for you 😊`;
+    const fallbackReply =
+      `I found ${productContext.length} matching product${
+        productContext.length === 1 ? "" : "s"
+      } for you 😊`;
 
     return {
       reply: aiReply || fallbackReply,
