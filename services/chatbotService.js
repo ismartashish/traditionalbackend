@@ -2,19 +2,18 @@ import axios from "axios";
 import { searchProductsForChatbot } from "./productSearchService.js";
 
 export const processChatMessage = async (message) => {
-  try {
-    if (!message || !message.trim()) {
-      return {
-        reply: "Please enter a message 😊",
-        products: [],
-      };
-    }
+  if (!message || !message.trim()) {
+    return {
+      reply: "Please enter a message 😊",
+      products: [],
+    };
+  }
 
+  try {
     const query = {};
-    const text = message.toLowerCase();
 
     // -----------------------------
-    // Price extraction
+    // PRICE
     // -----------------------------
     const priceMatch = message.match(
       /(?:under|below|less than)\s*[₹rs.]?\s*(\d+)/i
@@ -25,7 +24,7 @@ export const processChatMessage = async (message) => {
     }
 
     // -----------------------------
-    // State extraction
+    // STATE
     // -----------------------------
     if (/rajasthan|rajasthani/i.test(message)) {
       query.state = "Rajasthan";
@@ -38,7 +37,7 @@ export const processChatMessage = async (message) => {
     }
 
     // -----------------------------
-    // Category extraction
+    // CATEGORY
     // -----------------------------
     if (/clothing|cloth|saree|kurta|dress/i.test(message)) {
       query.category = "Clothing";
@@ -51,14 +50,14 @@ export const processChatMessage = async (message) => {
     }
 
     // -----------------------------
-    // Stock filter
+    // STOCK
     // -----------------------------
     if (/in stock|available/i.test(message)) {
       query.inStock = true;
     }
 
     // -----------------------------
-    // Get products from MongoDB
+    // SEARCH MONGODB
     // -----------------------------
     const products = await searchProductsForChatbot(query);
 
@@ -73,86 +72,111 @@ export const processChatMessage = async (message) => {
     }));
 
     // -----------------------------
-    // Prepare product context
+    // FALLBACK REPLY
+    // -----------------------------
+    let reply;
+
+    if (productContext.length === 0) {
+      reply = "Sorry, I couldn't find any matching products 😅";
+    } else {
+      reply = `I found ${productContext.length} product${
+        productContext.length > 1 ? "s" : ""
+      } that may interest you 😊`;
+    }
+
+    // -----------------------------
+    // PRODUCT CONTEXT FOR AI
     // -----------------------------
     const context =
       productContext.length > 0
         ? productContext
             .map(
               (p, index) =>
-                `${index + 1}. ${p.title} | Price: ₹${p.price} | Category: ${p.category} | State: ${p.state} | Stock: ${p.stock} | Rating: ${p.rating}`
+                `${index + 1}. ${p.title} | ₹${p.price} | ${p.category} | ${p.state} | Stock: ${p.stock} | Rating: ${p.rating}`
             )
             .join("\n")
-        : "No matching products found.";
+        : "No matching products.";
 
     // -----------------------------
-    // AI prompt
+    // HUGGING FACE AI
     // -----------------------------
-    const prompt = `
-You are Bharat Assistant, an ecommerce shopping assistant for traditional Indian products.
+    if (process.env.HUGGINGFACE_API_KEY) {
+      try {
+        const response = await axios.post(
+          "https://router.huggingface.co/v1/chat/completions",
+          {
+            model: "Qwen/Qwen2.5-7B-Instruct",
+            messages: [
+              {
+                role: "system",
+                content: `
+You are Bharat Assistant, an ecommerce assistant for traditional Indian products.
 
-Answer the user's question using ONLY the product information provided below.
+Use ONLY the product data provided by the application.
+Never invent products, prices, stock, ratings, categories or states.
 
-Products:
-${context}
-
+Be friendly and concise.
+                `,
+              },
+              {
+                role: "user",
+                content: `
 User question:
 ${message}
 
-Rules:
-- Be concise and friendly.
-- Do not invent products.
-- Do not invent prices, ratings, stock, or locations.
-- If no products match, say that no matching products were found.
-- Mention relevant product names and prices when useful.
+Available products:
+${context}
 
-Answer:
-`;
+Answer the user's question using the available products.
+                `,
+              },
+            ],
+            max_tokens: 150,
+            temperature: 0.4,
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${process.env.HUGGINGFACE_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            timeout: 30000,
+          }
+        );
 
-    // -----------------------------
-    // Hugging Face
-    // -----------------------------
-    const response = await axios.post(
-      "https://router.huggingface.co/hf-inference/models/google/flan-t5-base",
-      {
-        inputs: prompt,
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.HUGGINGFACE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        timeout: 30000,
+        const aiReply =
+          response.data?.choices?.[0]?.message?.content?.trim();
+
+        if (aiReply) {
+          reply = aiReply;
+        }
+      } catch (aiError) {
+        console.error(
+          "HUGGING FACE ERROR:",
+          aiError.response?.status,
+          aiError.response?.data || aiError.message
+        );
+
+        // Keep the product-based fallback reply.
       }
-    );
-
-    let reply = "I found these products for you 😊";
-
-    if (Array.isArray(response.data)) {
-      reply =
-        response.data[0]?.generated_text?.trim() ||
-        reply;
-    } else if (response.data?.error) {
-      console.error("Hugging Face error:", response.data.error);
-
-      reply =
-        productContext.length > 0
-          ? `I found ${productContext.length} matching product(s) for you.`
-          : "I couldn't find any matching products.";
+    } else {
+      console.warn("HUGGINGFACE_API_KEY is missing");
     }
 
+    // -----------------------------
+    // FINAL RESPONSE
+    // -----------------------------
     return {
       reply,
       products: productContext,
     };
   } catch (error) {
     console.error(
-      "CHATBOT SERVICE ERROR:",
+      "CHATBOT ERROR:",
       error.response?.data || error.message
     );
 
     return {
-      reply: "Sorry, I couldn't process that request right now 😅",
+      reply: "I couldn't process that request right now 😅",
       products: [],
     };
   }
