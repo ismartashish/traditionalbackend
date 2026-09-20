@@ -1,30 +1,47 @@
 import Product from "../models/Product.js";
 
-/* Escape special regex characters */
+/* =========================================================
+   HELPERS
+========================================================= */
+
 const escapeRegex = (value = "") => {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 };
+
+/* =========================================================
+   PRODUCT SEARCH
+========================================================= */
 
 export const searchProductsForChatbot = async (query = {}) => {
   const mongoQuery = {};
 
-  /* -------------------------------- */
-  /* Keyword                           */
-  /* -------------------------------- */
-  if (query.keyword) {
-    const safeKeyword = escapeRegex(query.keyword);
-    const regex = new RegExp(safeKeyword, "i");
+  /* -----------------------------
+     KEYWORD
+  ----------------------------- */
 
-    mongoQuery.$or = [
-      { title: regex },
-      { category: regex },
-      { state: regex },
-    ];
+  if (query.keyword?.trim()) {
+    const words = query.keyword
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+
+    const regexes = words.map(
+      (word) => new RegExp(escapeRegex(word), "i")
+    );
+
+    mongoQuery.$and = regexes.map((regex) => ({
+      $or: [
+        { title: regex },
+        { category: regex },
+        { state: regex },
+      ],
+    }));
   }
 
-  /* -------------------------------- */
-  /* Category                          */
-  /* -------------------------------- */
+  /* -----------------------------
+     CATEGORY
+  ----------------------------- */
+
   if (query.category) {
     mongoQuery.category = new RegExp(
       `^${escapeRegex(query.category)}$`,
@@ -32,9 +49,10 @@ export const searchProductsForChatbot = async (query = {}) => {
     );
   }
 
-  /* -------------------------------- */
-  /* State                             */
-  /* -------------------------------- */
+  /* -----------------------------
+     STATE
+  ----------------------------- */
+
   if (query.state) {
     mongoQuery.state = new RegExp(
       `^${escapeRegex(query.state)}$`,
@@ -42,39 +60,128 @@ export const searchProductsForChatbot = async (query = {}) => {
     );
   }
 
-  /* -------------------------------- */
-  /* Maximum price                     */
-  /* -------------------------------- */
-  if (query.maxPrice !== undefined) {
-    mongoQuery.price = {
-      ...(mongoQuery.price || {}),
-      $lte: Number(query.maxPrice),
-    };
-  }
+  /* -----------------------------
+     MIN PRICE
+  ----------------------------- */
 
-  /* -------------------------------- */
-  /* Minimum price                     */
-  /* -------------------------------- */
-  if (query.minPrice !== undefined) {
+  if (
+    query.minPrice !== undefined &&
+    query.minPrice !== null
+  ) {
     mongoQuery.price = {
       ...(mongoQuery.price || {}),
       $gte: Number(query.minPrice),
     };
   }
 
-  /* -------------------------------- */
-  /* In stock                          */
-  /* -------------------------------- */
-  if (query.inStock) {
-    mongoQuery.stock = {
-      $gt: 0,
+  /* -----------------------------
+     MAX PRICE
+  ----------------------------- */
+
+  if (
+    query.maxPrice !== undefined &&
+    query.maxPrice !== null
+  ) {
+    mongoQuery.price = {
+      ...(mongoQuery.price || {}),
+      $lte: Number(query.maxPrice),
     };
   }
 
-  const products = await Product.find(mongoQuery)
-    .sort({ rating: -1 })
-    .limit(10)
-    .lean();
+  /* -----------------------------
+     MIN RATING
+  ----------------------------- */
 
-  return products;
+  if (
+    query.minRating !== undefined &&
+    query.minRating !== null
+  ) {
+    mongoQuery.rating = {
+      $gte: Number(query.minRating),
+    };
+  }
+
+  /* -----------------------------
+     STOCK
+  ----------------------------- */
+
+  if (query.inStock === true) {
+    mongoQuery.stock = { $gt: 0 };
+  }
+
+  if (query.outOfStock === true) {
+    mongoQuery.stock = { $lte: 0 };
+  }
+
+  /* -----------------------------
+     SORT
+  ----------------------------- */
+
+  let sort = {};
+
+  switch (query.sortBy) {
+    case "price_low":
+      sort = { price: 1 };
+      break;
+
+    case "price_high":
+      sort = { price: -1 };
+      break;
+
+    case "rating":
+      sort = { rating: -1, numReviews: -1 };
+      break;
+
+    case "reviews":
+      sort = { numReviews: -1, rating: -1 };
+      break;
+
+    case "newest":
+      sort = { createdAt: -1 };
+      break;
+
+    case "oldest":
+      sort = { createdAt: 1 };
+      break;
+
+    default:
+      sort = { rating: -1, numReviews: -1 };
+  }
+
+  /* -----------------------------
+     LIMIT
+  ----------------------------- */
+
+  const limit = Math.min(
+    Math.max(Number(query.limit) || 10, 1),
+    30
+  );
+
+  return Product.find(mongoQuery)
+    .sort(sort)
+    .limit(limit)
+    .lean();
+};
+
+/* =========================================================
+   PRODUCT BY ID
+========================================================= */
+
+export const getProductForChatbot = async (productId) => {
+  return Product.findById(productId)
+    .populate("seller", "name shopName")
+    .lean();
+};
+
+/* =========================================================
+   PRODUCT COUNT
+========================================================= */
+
+export const countProductsForChatbot = async (query = {}) => {
+  const products = await searchProductsForChatbot({
+    ...query,
+    limit: 30,
+  });
+
+  return products.length;
 };
