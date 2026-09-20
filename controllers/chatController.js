@@ -6,19 +6,23 @@ export const chatWithBot = async (req, res) => {
 
     if (!message || !message.trim()) {
       return res.status(400).json({
-        message: "Message is required"
+        reply: "Please enter a message 😊",
+        products: [],
       });
     }
 
-    const result = await processChatMessage(message);
+    const result = await processChatMessage(
+      message.trim(),
+      req.user || null
+    );
 
-    res.json(result);
-
+    return res.json(result);
   } catch (error) {
     console.error("CHAT CONTROLLER ERROR:", error);
 
-    res.status(500).json({
-      message: "Chatbot failed"
+    return res.status(500).json({
+      reply: "Something went wrong while processing your request 😅",
+      products: [],
     });
   }
 };
