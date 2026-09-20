@@ -41,14 +41,17 @@ export const protect = async (req, res, next) => {
 /*
   Used by chatbot.
 
-  - Logged-in user  -> req.user is available
-  - Not logged-in   -> request is still allowed
-*/
+
+ 
+/* ================= SELLER ONLY ================= */
 export const optionalAuth = async (req, res, next) => {
   const authHeader = req.headers.authorization;
 
-  // No token = continue as guest
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+  // Guest user
+  if (
+    !authHeader ||
+    !authHeader.startsWith("Bearer ")
+  ) {
     req.user = null;
     return next();
   }
@@ -56,24 +59,23 @@ export const optionalAuth = async (req, res, next) => {
   try {
     const token = authHeader.split(" ")[1];
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_SECRET
+    );
 
-    req.user = await User.findById(decoded.id).select("-password");
+    req.user = await User.findById(
+      decoded.id
+    ).select("-password");
 
-    if (!req.user) {
-      req.user = null;
-    }
-  } catch (err) {
-    console.warn("OPTIONAL AUTH WARNING:", err.message);
-
-    // Don't block chatbot if token is invalid/expired
+    next();
+  } catch (error) {
+    // Invalid/expired token shouldn't break
+    // public product questions.
     req.user = null;
+    next();
   }
-
-  next();
 };
-
-/* ================= SELLER ONLY ================= */
 export const sellerOnly = (req, res, next) => {
   if (req.user && req.user.role === "seller") {
     next();
