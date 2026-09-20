@@ -21,7 +21,8 @@ export const chatWithBot = async (req, res) => {
     console.error("CHAT CONTROLLER ERROR:", error);
 
     return res.status(500).json({
-      reply: "Something went wrong while processing your request 😅",
+      reply:
+        "Something went wrong while processing your request 😅",
       products: [],
     });
   }
