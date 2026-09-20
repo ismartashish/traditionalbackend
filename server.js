@@ -25,9 +25,9 @@ app.use(express.urlencoded({ extended: true }));
 
 /* ===================== CORS (FIXED POSITION) ===================== */
 const allowedOrigins = [
-  "https://traditionalfrontend.vercel.app",
-  "http://localhost:5173",
-  "https://rupanjanasaha550.github.io/traditionalfrontend"
+  "https://bharat-tradition.netlify.app",
+  "http://localhost:5173"
+  
 ];
 
 app.use(
