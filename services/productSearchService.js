@@ -1,41 +1,74 @@
 import Product from "../models/Product.js";
 
+/* Escape special regex characters */
+const escapeRegex = (value = "") => {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+};
+
 export const searchProductsForChatbot = async (query = {}) => {
   const mongoQuery = {};
 
+  /* -------------------------------- */
+  /* Keyword                           */
+  /* -------------------------------- */
   if (query.keyword) {
-    const regex = new RegExp(query.keyword, "i");
+    const safeKeyword = escapeRegex(query.keyword);
+    const regex = new RegExp(safeKeyword, "i");
 
     mongoQuery.$or = [
       { title: regex },
       { category: regex },
-      { state: regex }
+      { state: regex },
     ];
   }
 
+  /* -------------------------------- */
+  /* Category                          */
+  /* -------------------------------- */
   if (query.category) {
-    mongoQuery.category = new RegExp(query.category, "i");
+    mongoQuery.category = new RegExp(
+      `^${escapeRegex(query.category)}$`,
+      "i"
+    );
   }
 
+  /* -------------------------------- */
+  /* State                             */
+  /* -------------------------------- */
   if (query.state) {
-    mongoQuery.state = new RegExp(query.state, "i");
+    mongoQuery.state = new RegExp(
+      `^${escapeRegex(query.state)}$`,
+      "i"
+    );
   }
 
-  if (query.maxPrice) {
-    mongoQuery.price = {
-      $lte: Number(query.maxPrice)
-    };
-  }
-
-  if (query.minPrice) {
+  /* -------------------------------- */
+  /* Maximum price                     */
+  /* -------------------------------- */
+  if (query.maxPrice !== undefined) {
     mongoQuery.price = {
       ...(mongoQuery.price || {}),
-      $gte: Number(query.minPrice)
+      $lte: Number(query.maxPrice),
     };
   }
 
+  /* -------------------------------- */
+  /* Minimum price                     */
+  /* -------------------------------- */
+  if (query.minPrice !== undefined) {
+    mongoQuery.price = {
+      ...(mongoQuery.price || {}),
+      $gte: Number(query.minPrice),
+    };
+  }
+
+  /* -------------------------------- */
+  /* In stock                          */
+  /* -------------------------------- */
   if (query.inStock) {
-    mongoQuery.stock = { $gt: 0 };
+    mongoQuery.stock = {
+      $gt: 0,
+    };
   }
 
   const products = await Product.find(mongoQuery)
